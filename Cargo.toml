@@ -16,3 +16,11 @@ name = "tracy"
 path = "src/main.rs"
 
 [dependencies]
+ast-grep-core = { version = "0.40.0", features = ["tree-sitter"] }
+ast-grep-language = { version = "0.40.0", features = ["builtin-parser"] }
+clap = { version = "4.5.53", features = ["derive"] }
+ignore = "0.4.25"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+glob = "0.3.3"

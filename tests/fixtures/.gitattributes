@@ -1,0 +1,7 @@
+# Vendored dependencies
+vendor/** linguist-vendored
+third_party/* linguist-vendored
+
+# Generated files
+*.generated.rs linguist-generated
+src/gen/** linguist-generated
