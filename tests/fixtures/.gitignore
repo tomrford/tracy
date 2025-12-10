@@ -1,0 +1,7 @@
+# Build artifacts
+build/
+dist/
+*.o
+
+# Temp files
+ignored/
