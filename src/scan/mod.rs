@@ -16,8 +16,6 @@ use std::path::{Path, PathBuf};
 pub struct Entry {
     pub file: PathBuf,
     pub line: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent: Option<String>,
 }
 
 pub type ScanResult = BTreeMap<String, Vec<Entry>>;
@@ -65,10 +63,6 @@ fn scan_file(
         let line = node.start_pos().line() + 1;
         let text = node.text();
 
-        if !is_doc_comment(&text) {
-            continue;
-        }
-
         for cap in pattern.captures_iter(&text) {
             let slug = format!(
                 "{}-{}",
@@ -80,12 +74,9 @@ fn scan_file(
                 continue;
             }
 
-            let parent = find_parent_scope(&node);
-
             results.entry(slug).or_default().push(Entry {
                 file: relative.to_path_buf(),
                 line,
-                parent,
             });
         }
     }
@@ -95,86 +86,6 @@ fn scan_file(
 
 fn is_comment(kind: &str) -> bool {
     kind.contains("comment")
-}
-
-fn find_parent_scope<D>(node: &ast_grep_core::Node<D>) -> Option<String>
-where
-    D: ast_grep_core::Doc,
-{
-    const SKIP_KINDS: &[&str] = &[
-        "source_file",
-        "program",
-        "declaration_list",
-        "field_declaration_list",
-        "block",
-        "statement_block",
-        "class_body",
-        "module",
-    ];
-
-    let mut current = node.parent();
-    while let Some(p) = current {
-        let kind = p.kind();
-
-        if SKIP_KINDS.contains(&kind.as_ref()) {
-            current = p.parent();
-            continue;
-        }
-
-        let name = find_name_in_node(&p)?;
-        let type_label = kind_to_type_label(&kind);
-        return Some(format!("[{}]{}", type_label, name));
-    }
-
-    None
-}
-
-fn find_name_in_node<D>(node: &ast_grep_core::Node<D>) -> Option<String>
-where
-    D: ast_grep_core::Doc,
-{
-    const NAME_KINDS: &[&str] = &["identifier", "name", "type_identifier", "property_identifier"];
-
-    for child in node.children() {
-        let ck = child.kind();
-        if NAME_KINDS.iter().any(|&n| ck == n) {
-            return Some(child.text().to_string());
-        }
-    }
-    None
-}
-
-fn kind_to_type_label(kind: &str) -> &'static str {
-    match kind {
-        "function_item" | "function_declaration" | "function_definition" | "method_definition"
-        | "method_declaration" => "function",
-        "mod_item" => "module",
-        "struct_item" | "struct_specifier" => "struct",
-        "enum_item" => "enum",
-        "impl_item" => "impl",
-        "trait_item" => "trait",
-        "class_declaration" | "class_definition" | "class_specifier" => "class",
-        "interface_declaration" => "interface",
-        "type_declaration" => "type",
-        // Fallback patterns
-        k if k.contains("function") || k.contains("method") => "function",
-        k if k.contains("class") => "class",
-        k if k.contains("struct") => "struct",
-        k if k.contains("mod") || k.contains("module") => "module",
-        k if k.contains("impl") => "impl",
-        _ => "scope",
-    }
-}
-
-fn is_doc_comment(text: &str) -> bool {
-    let trimmed = text.trim_start();
-    trimmed.starts_with("///")
-        || trimmed.starts_with("//!")
-        || trimmed.starts_with("/**")
-        || trimmed.starts_with("/*!")
-        || trimmed.starts_with("#'")      // R
-        || trimmed.starts_with("\"\"\"")  // Python docstring
-        || trimmed.starts_with("'''") // Python docstring
 }
 
 #[cfg(test)]
@@ -254,12 +165,13 @@ mod tests {
     }
 
     #[test]
-    fn ignores_regular_comments() {
+    fn finds_regular_comments() {
         let file = create_temp_file(".rs", "// REQ-1: regular comment\n/* REQ-2 */\nfn x() {}");
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
-        assert!(results.is_empty());
+        assert!(results.contains_key("REQ-1"));
+        assert!(results.contains_key("REQ-2"));
     }
 
     #[test]
@@ -286,12 +198,12 @@ def foo(): pass"#);
     }
 
     #[test]
-    fn python_ignores_hash_comments() {
-        let file = create_temp_file(".py", "# REQ-999: regular python comment\ndef x(): pass");
+    fn python_finds_hash_comments() {
+        let file = create_temp_file(".py", "# REQ-999: python comment\ndef x(): pass");
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
-        assert!(results.is_empty());
+        assert!(results.contains_key("REQ-999"));
     }
 
     #[test]
@@ -304,12 +216,13 @@ def foo(): pass"#);
     }
 
     #[test]
-    fn javascript_ignores_regular_comments() {
+    fn javascript_finds_regular_comments() {
         let file = create_temp_file(".js", "// REQ-201\n/* REQ-202 */\nfunction x() {}");
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
-        assert!(results.is_empty());
+        assert!(results.contains_key("REQ-201"));
+        assert!(results.contains_key("REQ-202"));
     }
 
     #[test]
@@ -322,13 +235,12 @@ def foo(): pass"#);
     }
 
     #[test]
-    fn go_doc_comment() {
+    fn go_comment() {
         let file = create_temp_file(".go", "package main\n\n// REQ-300: go comment\nfunc main() {}");
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
-        // Go uses // for doc comments but we filter to /// only
-        assert!(results.is_empty());
+        assert!(results.contains_key("REQ-300"));
     }
 
     #[test]
@@ -506,17 +418,17 @@ def foo(): pass"#);
     }
 
     #[test]
-    fn mixed_doc_and_regular_comments() {
+    fn finds_all_comment_styles() {
         let file = create_temp_file(
             ".rs",
-            "// REQ-1: regular\n/// REQ-2: doc\n/* REQ-3 */\n/** REQ-4 */\nfn x() {}",
+            "// REQ-1: line\n/// REQ-2: doc\n/* REQ-3 */\n/** REQ-4 */\nfn x() {}",
         );
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
-        assert!(!results.contains_key("REQ-1"));
+        assert!(results.contains_key("REQ-1"));
         assert!(results.contains_key("REQ-2"));
-        assert!(!results.contains_key("REQ-3"));
+        assert!(results.contains_key("REQ-3"));
         assert!(results.contains_key("REQ-4"));
     }
 
@@ -607,62 +519,6 @@ def foo(): pass"#);
         .unwrap();
 
         assert_eq!(results["REQ-1"].len(), 2);
-    }
-
-    // ==================== Context preservation ====================
-
-    #[test]
-    fn parent_is_none_for_top_level() {
-        let file = create_temp_file(".rs", "/// REQ-1: top level\nfn x() {}");
-        let root = file.path().parent().unwrap();
-        let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
-
-        assert!(results["REQ-1"][0].parent.is_none());
-    }
-
-    #[test]
-    fn parent_captures_containing_impl() {
-        let file = create_temp_file(
-            ".rs",
-            "impl MyStruct {\n    /// REQ-1: inside impl\n    fn method(&self) {}\n}",
-        );
-        let root = file.path().parent().unwrap();
-        let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
-
-        assert_eq!(
-            results["REQ-1"][0].parent.as_deref(),
-            Some("[impl]MyStruct")
-        );
-    }
-
-    #[test]
-    fn parent_captures_containing_module() {
-        let file = create_temp_file(
-            ".rs",
-            "mod mymod {\n    /// REQ-1: inside mod\n    fn inner() {}\n}",
-        );
-        let root = file.path().parent().unwrap();
-        let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
-
-        assert_eq!(
-            results["REQ-1"][0].parent.as_deref(),
-            Some("[module]mymod")
-        );
-    }
-
-    #[test]
-    fn parent_captures_containing_function() {
-        let file = create_temp_file(
-            ".rs",
-            "fn outer() {\n    /// REQ-1: inside function\n    let x = 1;\n}",
-        );
-        let root = file.path().parent().unwrap();
-        let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
-
-        assert_eq!(
-            results["REQ-1"][0].parent.as_deref(),
-            Some("[function]outer")
-        );
     }
 
     // ==================== Special slug patterns ====================

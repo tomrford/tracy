@@ -64,18 +64,18 @@ fn finds_cpp_doc_comments() {
 }
 
 #[test]
-fn ignores_go_regular_comments() {
+fn finds_go_comments() {
     let results = run_scan(false, false);
 
-    assert!(!results.contains_key("REQ-30"), "Go // is not a doc comment");
-    assert!(!results.contains_key("REQ-31"), "Go /* is not a doc comment");
+    assert!(results.contains_key("REQ-30"), "Go // comment");
+    assert!(results.contains_key("REQ-31"), "Go /* comment");
 }
 
 #[test]
-fn ignores_regular_comments_in_all_languages() {
+fn finds_regular_comments_in_all_languages() {
     let results = run_scan(false, false);
 
-    assert!(!results.contains_key("REQ-999"), "regular comments should be ignored");
+    assert!(results.contains_key("REQ-999"), "regular comments should be found");
 }
 
 #[test]
