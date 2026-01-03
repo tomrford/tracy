@@ -5,7 +5,8 @@ pub struct ScanArgs {
     #[arg(
         long,
         short = 's',
-        help = "Slug pattern to search for (e.g., 'REQ' would match 'REQ-123')"
+        required = true,
+        help = "Slug pattern to search for (e.g., 'REQ' matches 'REQ-123'). Can be repeated."
     )]
-    pub slug: String,
+    pub slug: Vec<String>,
 }

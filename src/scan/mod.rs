@@ -24,7 +24,8 @@ pub fn scan_files(
     paths: &[PathBuf],
     args: &ScanArgs,
 ) -> Result<ScanResult, ScanError> {
-    let pattern = Regex::new(&format!(r"({})-(\d+)", regex::escape(&args.slug)))?;
+    let slugs: Vec<String> = args.slug.iter().map(|s| regex::escape(s)).collect();
+    let pattern = Regex::new(&format!(r"(?:{})-\d+", slugs.join("|")))?;
     let mut results: ScanResult = BTreeMap::new();
 
     for path in paths {
@@ -62,12 +63,8 @@ fn scan_file(
         let line = node.start_pos().line() + 1;
         let text = node.text();
 
-        for cap in pattern.captures_iter(&text) {
-            let slug = format!(
-                "{}-{}",
-                cap.get(1).unwrap().as_str(),
-                cap.get(2).unwrap().as_str()
-            );
+        for m in pattern.find_iter(&text) {
+            let slug = m.as_str().to_string();
 
             if seen.insert((slug.clone(), line)) {
                 results.entry(slug).or_default().push(Entry {
@@ -99,7 +96,7 @@ mod tests {
 
     fn scan_args(slug: &str) -> ScanArgs {
         ScanArgs {
-            slug: slug.to_string(),
+            slug: vec![slug.to_string()],
         }
     }
 
@@ -569,5 +566,33 @@ def foo(): pass"#,
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
         assert!(results.contains_key("REQ-0"));
+    }
+
+    #[test]
+    fn multiple_slug_patterns() {
+        let file = create_temp_file(".rs", "/// REQ-1 and LIN-2 and FEAT-3\nfn x() {}");
+        let root = file.path().parent().unwrap();
+        let args = ScanArgs {
+            slug: vec!["REQ".to_string(), "LIN".to_string(), "FEAT".to_string()],
+        };
+        let results = scan_files(root, &[file.path().to_path_buf()], &args).unwrap();
+
+        assert!(results.contains_key("REQ-1"));
+        assert!(results.contains_key("LIN-2"));
+        assert!(results.contains_key("FEAT-3"));
+    }
+
+    #[test]
+    fn multiple_slugs_only_matches_specified() {
+        let file = create_temp_file(".rs", "/// REQ-1 LIN-2 OTHER-3\nfn x() {}");
+        let root = file.path().parent().unwrap();
+        let args = ScanArgs {
+            slug: vec!["REQ".to_string(), "LIN".to_string()],
+        };
+        let results = scan_files(root, &[file.path().to_path_buf()], &args).unwrap();
+
+        assert!(results.contains_key("REQ-1"));
+        assert!(results.contains_key("LIN-2"));
+        assert!(!results.contains_key("OTHER-3"));
     }
 }

@@ -17,9 +17,6 @@ pub enum TracyError {
     #[error("failed to write output file: {0}")]
     WriteOutput(#[from] std::io::Error),
 
-    #[error("no files found to scan")]
-    NoFiles,
-
-    #[error("no requirements found")]
+    #[error("no matches found")]
     NoResults,
 }

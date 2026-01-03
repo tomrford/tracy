@@ -68,11 +68,17 @@ fn parse_gitattributes(root: &Path) -> Excludes {
             continue;
         };
 
-        if line.contains("linguist-vendored") {
-            vendored.push(pattern.clone());
-        }
-        if line.contains("linguist-generated") {
-            generated.push(pattern.clone());
+        let is_vendored = line.contains("linguist-vendored");
+        let is_generated = line.contains("linguist-generated");
+
+        match (is_vendored, is_generated) {
+            (true, true) => {
+                vendored.push(pattern.clone());
+                generated.push(pattern);
+            }
+            (true, false) => vendored.push(pattern),
+            (false, true) => generated.push(pattern),
+            (false, false) => {}
         }
     }
 
