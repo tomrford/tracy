@@ -21,12 +21,9 @@ fn run() -> Result<(), TracyError> {
     let args = Args::parse();
 
     let files = collect_files(&args.root, &args.filter)?;
-    if files.is_empty() {
-        return Err(TracyError::NoFiles);
-    }
-
     let matches = scan_files(&args.root, &files, &args.scan)?;
-    if matches.is_empty() {
+
+    if args.fail_on_empty && matches.is_empty() {
         return Err(TracyError::NoResults);
     }
 

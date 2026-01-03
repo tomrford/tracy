@@ -13,7 +13,7 @@ fn run_scan(include_vendored: bool, include_generated: bool) -> BTreeMap<String,
         include_submodules: false,
     };
     let scan_args = tracy::scan::ScanArgs {
-        slug: "REQ".to_string(),
+        slug: vec!["REQ".to_string()],
     };
 
     let files = tracy::filter::collect_files(&root, &filter_args).unwrap();
