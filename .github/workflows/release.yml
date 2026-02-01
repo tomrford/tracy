@@ -21,6 +21,8 @@ jobs:
   create-release:
     name: Create release
     runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
     outputs:
       tag_name: ${{ steps.tag.outputs.tag_name }}
     steps:
