@@ -1,35 +1,35 @@
 # Tracy
 
-Scans codebases for requirement references in doc comments and outputs JSON.
+Scans codebases for requirement references in comments and outputs JSON.
 
 ## Usage
 
 ```bash
-tracy --slug REQ --root ./src
+tracy --slug REQ --root .
 ```
 
-Finds `{SLUG}-{NUMBER}` formatted references in comments across your codebase, returning JSON objects containing a list of appearances and their locations:
+Finds `{SLUG}-{NUMBER}` formatted references in comments across your codebase, returning JSON keyed by requirement id. Repeat `--slug` to match multiple prefixes.
+
+Example (single hit):
+
+```rust
+// src/lib.rs
+// REQ-1: validate input
+```
 
 ```json
 {
-  "REQ-123": [
+  "REQ-1": [
     {
       "file": "src/lib.rs",
-      "line": 42
-    }
-  ],
-  "REQ-456": [
-    {
-      "file": "src/lib.rs",
-      "line": 22
-    },
-    {
-      "file": "src/main.rs",
-      "line": 10
+      "line": 1,
+      "comment_text": "// REQ-1: validate input"
     }
   ]
 }
 ```
+
+Each entry may also include `above`, `below`, `inline`, and `scope` context fields when available.
 
 ## Options
 
@@ -39,6 +39,7 @@ Finds `{SLUG}-{NUMBER}` formatted references in comments across your codebase, r
 | `--root`               | Root directory to scan (default: `.`)          |
 | `--output`, `-o`       | Write output to file                           |
 | `--quiet`, `-q`        | Suppress stdout output                         |
+| `--fail-on-empty`      | Exit with error if no matches found            |
 | `--include-vendored`   | Include vendored files (per `.gitattributes`)  |
 | `--include-generated`  | Include generated files (per `.gitattributes`) |
 | `--include-submodules` | Include git submodules                         |
