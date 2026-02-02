@@ -13,8 +13,14 @@ struct Excludes {
     generated: Vec<glob::Pattern>,
 }
 
+struct GlobFilters {
+    include: Vec<glob::Pattern>,
+    exclude: Vec<glob::Pattern>,
+}
+
 pub fn collect_files(root: &Path, args: &FilterArgs) -> Result<Vec<PathBuf>, FilterError> {
     let excludes = parse_gitattributes(root);
+    let filters = parse_globs(args)?;
     let mut files = Vec::new();
 
     for entry in WalkBuilder::new(root)
@@ -32,7 +38,7 @@ pub fn collect_files(root: &Path, args: &FilterArgs) -> Result<Vec<PathBuf>, Fil
 
         let path = entry.path();
 
-        if is_excluded(path, root, &excludes, args) {
+        if is_excluded(path, root, &excludes, &filters, args) {
             continue;
         }
 
@@ -40,6 +46,32 @@ pub fn collect_files(root: &Path, args: &FilterArgs) -> Result<Vec<PathBuf>, Fil
     }
 
     Ok(files)
+}
+
+fn parse_globs(args: &FilterArgs) -> Result<GlobFilters, FilterError> {
+    let include = args
+        .include
+        .iter()
+        .map(|g| {
+            glob::Pattern::new(g).map_err(|e| FilterError::InvalidGlob {
+                pattern: g.clone(),
+                source: e,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let exclude = args
+        .exclude
+        .iter()
+        .map(|g| {
+            glob::Pattern::new(g).map_err(|e| FilterError::InvalidGlob {
+                pattern: g.clone(),
+                source: e,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(GlobFilters { include, exclude })
 }
 
 fn parse_gitattributes(root: &Path) -> Excludes {
@@ -88,11 +120,25 @@ fn parse_gitattributes(root: &Path) -> Excludes {
     }
 }
 
-fn is_excluded(path: &Path, root: &Path, excludes: &Excludes, args: &FilterArgs) -> bool {
+fn is_excluded(
+    path: &Path,
+    root: &Path,
+    excludes: &Excludes,
+    filters: &GlobFilters,
+    args: &FilterArgs,
+) -> bool {
     let Ok(relative) = path.strip_prefix(root) else {
         return false;
     };
     let relative_str = relative.to_string_lossy();
+
+    if !filters.include.is_empty() && !filters.include.iter().any(|p| p.matches(&relative_str)) {
+        return true;
+    }
+
+    if filters.exclude.iter().any(|p| p.matches(&relative_str)) {
+        return true;
+    }
 
     if !args.include_vendored && excludes.vendored.iter().any(|p| p.matches(&relative_str)) {
         return true;
@@ -133,32 +179,74 @@ mod tests {
     #[test]
     fn is_excluded_respects_vendored_flag() {
         let excludes = parse_gitattributes(&fixture_root());
+        let filters = parse_globs(&FilterArgs::default()).unwrap();
         let root = Path::new("/repo");
         let path = Path::new("/repo/vendor/dep/lib.rs");
 
         let args_exclude = FilterArgs::default();
-        assert!(is_excluded(path, root, &excludes, &args_exclude));
+        assert!(is_excluded(path, root, &excludes, &filters, &args_exclude));
 
         let args_include = FilterArgs {
             include_vendored: true,
             ..Default::default()
         };
-        assert!(!is_excluded(path, root, &excludes, &args_include));
+        assert!(!is_excluded(path, root, &excludes, &filters, &args_include));
     }
 
     #[test]
     fn is_excluded_respects_generated_flag() {
         let excludes = parse_gitattributes(&fixture_root());
+        let filters = parse_globs(&FilterArgs::default()).unwrap();
         let root = Path::new("/repo");
         let path = Path::new("/repo/types.generated.rs");
 
         let args_exclude = FilterArgs::default();
-        assert!(is_excluded(path, root, &excludes, &args_exclude));
+        assert!(is_excluded(path, root, &excludes, &filters, &args_exclude));
 
         let args_include = FilterArgs {
             include_generated: true,
             ..Default::default()
         };
-        assert!(!is_excluded(path, root, &excludes, &args_include));
+        assert!(!is_excluded(path, root, &excludes, &filters, &args_include));
+    }
+
+    #[test]
+    fn include_globs_filter_paths() {
+        let excludes = Excludes {
+            vendored: Vec::new(),
+            generated: Vec::new(),
+        };
+        let root = Path::new("/repo");
+        let path_in = Path::new("/repo/src/main.rs");
+        let path_out = Path::new("/repo/tests/test.rs");
+
+        let args = FilterArgs {
+            include: vec!["src/**".to_string()],
+            ..Default::default()
+        };
+        let filters = parse_globs(&args).unwrap();
+
+        assert!(!is_excluded(path_in, root, &excludes, &filters, &args));
+        assert!(is_excluded(path_out, root, &excludes, &filters, &args));
+    }
+
+    #[test]
+    fn exclude_globs_filter_paths() {
+        let excludes = Excludes {
+            vendored: Vec::new(),
+            generated: Vec::new(),
+        };
+        let root = Path::new("/repo");
+        let path_in = Path::new("/repo/src/main.rs");
+        let path_out = Path::new("/repo/src/gen/types.rs");
+
+        let args = FilterArgs {
+            exclude: vec!["src/gen/**".to_string()],
+            ..Default::default()
+        };
+        let filters = parse_globs(&args).unwrap();
+
+        assert!(!is_excluded(path_in, root, &excludes, &filters, &args));
+        assert!(is_excluded(path_out, root, &excludes, &filters, &args));
     }
 }

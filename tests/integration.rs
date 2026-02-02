@@ -5,12 +5,17 @@ fn fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-fn run_scan(include_vendored: bool, include_generated: bool) -> BTreeMap<String, Vec<tracy::scan::Entry>> {
+fn run_scan(
+    include_vendored: bool,
+    include_generated: bool,
+) -> BTreeMap<String, Vec<tracy::scan::Entry>> {
     let root = fixture_root();
     let filter_args = tracy::filter::FilterArgs {
         include_vendored,
         include_generated,
         include_submodules: false,
+        include: Vec::new(),
+        exclude: Vec::new(),
     };
     let scan_args = tracy::scan::ScanArgs {
         slug: vec!["REQ".to_string()],
@@ -75,39 +80,66 @@ fn finds_go_comments() {
 fn finds_regular_comments_in_all_languages() {
     let results = run_scan(false, false);
 
-    assert!(results.contains_key("REQ-999"), "regular comments should be found");
+    assert!(
+        results.contains_key("REQ-999"),
+        "regular comments should be found"
+    );
 }
 
 #[test]
 fn excludes_vendored_by_default() {
     let results = run_scan(false, false);
 
-    assert!(!results.contains_key("REQ-100"), "vendor/ should be excluded");
-    assert!(!results.contains_key("REQ-101"), "third_party/ should be excluded");
+    assert!(
+        !results.contains_key("REQ-100"),
+        "vendor/ should be excluded"
+    );
+    assert!(
+        !results.contains_key("REQ-101"),
+        "third_party/ should be excluded"
+    );
 }
 
 #[test]
 fn includes_vendored_when_flag_set() {
     let results = run_scan(true, false);
 
-    assert!(results.contains_key("REQ-100"), "vendor/ included with flag");
-    assert!(results.contains_key("REQ-101"), "third_party/ included with flag");
+    assert!(
+        results.contains_key("REQ-100"),
+        "vendor/ included with flag"
+    );
+    assert!(
+        results.contains_key("REQ-101"),
+        "third_party/ included with flag"
+    );
 }
 
 #[test]
 fn excludes_generated_by_default() {
     let results = run_scan(false, false);
 
-    assert!(!results.contains_key("REQ-102"), "src/gen/ should be excluded");
-    assert!(!results.contains_key("REQ-103"), "*.generated.rs should be excluded");
+    assert!(
+        !results.contains_key("REQ-102"),
+        "src/gen/ should be excluded"
+    );
+    assert!(
+        !results.contains_key("REQ-103"),
+        "*.generated.rs should be excluded"
+    );
 }
 
 #[test]
 fn includes_generated_when_flag_set() {
     let results = run_scan(false, true);
 
-    assert!(results.contains_key("REQ-102"), "src/gen/ included with flag");
-    assert!(results.contains_key("REQ-103"), "*.generated.rs included with flag");
+    assert!(
+        results.contains_key("REQ-102"),
+        "src/gen/ included with flag"
+    );
+    assert!(
+        results.contains_key("REQ-103"),
+        "*.generated.rs included with flag"
+    );
 }
 
 #[test]
@@ -213,5 +245,8 @@ fn skips_unsupported_file_types() {
     let results = run_scan(false, false);
 
     assert!(!results.contains_key("REQ-300"), "markdown not supported");
-    assert!(!results.contains_key("REQ-301"), "json not supported for comments");
+    assert!(
+        !results.contains_key("REQ-301"),
+        "json not supported for comments"
+    );
 }

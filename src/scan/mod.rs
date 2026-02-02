@@ -6,6 +6,7 @@ pub use args::ScanArgs;
 pub use context::{CodeContext, ScopeItem};
 pub use error::ScanError;
 
+use crate::git::BlameInfo;
 use ast_grep_language::{Language, LanguageExt, SupportLang};
 use context::{extract_block_context, extract_hierarchy};
 use regex::Regex;
@@ -35,6 +36,10 @@ pub struct Entry {
     /// Scope hierarchy from innermost to outermost (fn → impl → mod → file)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub scope: Vec<ScopeItem>,
+
+    /// Git blame metadata for the marker line
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blame: Option<BlameInfo>,
 }
 
 pub type ScanResult = BTreeMap<String, Vec<Entry>>;
@@ -106,6 +111,7 @@ fn scan_file(
                     below: block_ctx.below,
                     inline: block_ctx.inline,
                     scope,
+                    blame: None,
                 });
             }
         }
@@ -653,7 +659,10 @@ def foo(): pass"#,
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
         let entry = &results["REQ-1"][0];
-        assert!(entry.inline.is_none(), "standalone comment has no inline context");
+        assert!(
+            entry.inline.is_none(),
+            "standalone comment has no inline context"
+        );
     }
 
     #[test]
@@ -704,7 +713,10 @@ def foo(): pass"#,
 
     #[test]
     fn extracts_inline_context_for_js_const() {
-        let file = create_temp_file(".js", "const sampleRate = 44100; // REQ-1\nfunction foo() {}");
+        let file = create_temp_file(
+            ".js",
+            "const sampleRate = 44100; // REQ-1\nfunction foo() {}",
+        );
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
@@ -736,7 +748,10 @@ def foo(): pass"#,
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
         let entry = &results["REQ-1"][0];
-        assert!(entry.below.is_some(), "doc comment should have below context");
+        assert!(
+            entry.below.is_some(),
+            "doc comment should have below context"
+        );
         let ctx = entry.below.as_ref().unwrap();
         assert_eq!(ctx.kind, "function_item");
         assert_eq!(ctx.name.as_deref(), Some("main"));
@@ -806,7 +821,10 @@ def foo(): pass"#,
         let entry = &results["REQ-1"][0];
         assert!(!entry.scope.is_empty(), "should have scope hierarchy");
         // Should contain the outer function
-        let has_outer = entry.scope.iter().any(|s| s.name.as_deref() == Some("outer"));
+        let has_outer = entry
+            .scope
+            .iter()
+            .any(|s| s.name.as_deref() == Some("outer"));
         assert!(has_outer, "scope should include outer function");
     }
 
@@ -837,14 +855,8 @@ def foo(): pass"#,
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
         let entry = &results["REQ-1"][0];
-        let has_method = entry
-            .scope
-            .iter()
-            .any(|s| s.kind == "method_definition");
-        let has_class = entry
-            .scope
-            .iter()
-            .any(|s| s.kind == "class_declaration");
+        let has_method = entry.scope.iter().any(|s| s.kind == "method_definition");
+        let has_class = entry.scope.iter().any(|s| s.kind == "class_declaration");
         assert!(has_method || has_class, "should have class/method in scope");
     }
 
@@ -858,10 +870,7 @@ def foo(): pass"#,
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
         let entry = &results["REQ-1"][0];
-        let has_function = entry
-            .scope
-            .iter()
-            .any(|s| s.kind == "function_definition");
+        let has_function = entry.scope.iter().any(|s| s.kind == "function_definition");
         let has_class = entry.scope.iter().any(|s| s.kind == "class_definition");
         assert!(has_function, "should have function in scope");
         assert!(has_class, "should have class in scope");
@@ -939,10 +948,7 @@ def foo(): pass"#,
     #[test]
     fn stacked_comments_share_below_context() {
         // When comments are stacked, they all point to the same code below
-        let file = create_temp_file(
-            ".rs",
-            "// REQ-1: first\n// REQ-2: second\nfn foo() {}",
-        );
+        let file = create_temp_file(".rs", "// REQ-1: first\n// REQ-2: second\nfn foo() {}");
         let root = file.path().parent().unwrap();
         let results = scan_files(root, &[file.path().to_path_buf()], &scan_args("REQ")).unwrap();
 
@@ -1014,6 +1020,9 @@ mod outer_mod {
 
         let entry = &results["REQ-1"][0];
         // Should have multiple levels of scope
-        assert!(entry.scope.len() >= 2, "should have at least 2 scope levels");
+        assert!(
+            entry.scope.len() >= 2,
+            "should have at least 2 scope levels"
+        );
     }
 }
