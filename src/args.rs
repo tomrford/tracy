@@ -22,6 +22,9 @@ pub struct Args {
     #[arg(long, help = "Exit with error if no matches found")]
     pub fail_on_empty: bool,
 
+    #[arg(long, help = "Include git repository metadata in output")]
+    pub include_git_meta: bool,
+
     #[command(flatten)]
     pub filter: FilterArgs,
 

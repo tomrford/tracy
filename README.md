@@ -40,6 +40,7 @@ Each entry may also include `above`, `below`, `inline`, and `scope` context fiel
 | `--output`, `-o`       | Write output to file                           |
 | `--quiet`, `-q`        | Suppress stdout output                         |
 | `--fail-on-empty`      | Exit with error if no matches found            |
+| `--include-git-meta`   | Include git repository metadata in output      |
 | `--include-vendored`   | Include vendored files (per `.gitattributes`)  |
 | `--include-generated`  | Include generated files (per `.gitattributes`) |
 | `--include-submodules` | Include git submodules                         |
