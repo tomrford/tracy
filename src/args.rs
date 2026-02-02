@@ -1,4 +1,5 @@
 use crate::filter::FilterArgs;
+use crate::output::OutputFormat;
 use crate::scan::ScanArgs;
 use clap::Parser;
 use std::path::PathBuf;
@@ -12,6 +13,14 @@ use std::path::PathBuf;
 pub struct Args {
     #[arg(long, default_value = ".", help = "Root directory to scan")]
     pub root: PathBuf,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = OutputFormat::Json,
+        help = "Output format"
+    )]
+    pub format: OutputFormat,
 
     #[arg(short, long, help = "Write output to file (in addition to stdout)")]
     pub output: Option<PathBuf>,
