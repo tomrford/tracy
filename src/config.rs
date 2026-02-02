@@ -12,6 +12,7 @@ pub struct Config {
     pub quiet: Option<bool>,
     pub fail_on_empty: Option<bool>,
     pub include_git_meta: Option<bool>,
+    pub include_blame: Option<bool>,
     #[serde(default)]
     pub scan: ScanConfig,
     #[serde(default)]
@@ -119,4 +120,3 @@ include = ["src/**"]
         );
     }
 }
-

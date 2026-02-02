@@ -85,6 +85,7 @@ fn format_csv(meta: Option<&GitMeta>, results: &ScanResult) -> String {
         "below",
         "inline",
         "scope",
+        "blame",
     ];
     if meta.is_some() {
         header.extend(["repo_root", "head_sha", "head_ref", "is_dirty"]);
@@ -113,6 +114,11 @@ fn format_csv(meta: Option<&GitMeta>, results: &ScanResult) -> String {
             } else {
                 serde_json::to_string(&entry.scope).unwrap_or_default()
             };
+            let blame = entry
+                .blame
+                .as_ref()
+                .map(|b| serde_json::to_string(b).unwrap_or_default())
+                .unwrap_or_default();
 
             let mut row = vec![
                 requirement_id.to_string(),
@@ -123,6 +129,7 @@ fn format_csv(meta: Option<&GitMeta>, results: &ScanResult) -> String {
                 below,
                 inline,
                 scope,
+                blame,
             ];
 
             if let Some(meta) = meta {
@@ -200,6 +207,8 @@ fn format_sarif(meta: Option<&GitMeta>, results: &ScanResult) -> Result<String, 
     struct SarifResultProperties<'a> {
         requirement_id: &'a str,
         comment_text: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        blame: Option<&'a crate::git::BlameInfo>,
     }
 
     #[derive(Serialize)]
@@ -253,6 +262,7 @@ fn format_sarif(meta: Option<&GitMeta>, results: &ScanResult) -> Result<String, 
                 properties: SarifResultProperties {
                     requirement_id,
                     comment_text: &entry.comment_text,
+                    blame: entry.blame.as_ref(),
                 },
             });
         }
@@ -301,6 +311,7 @@ mod tests {
                 below: None,
                 inline: None,
                 scope: Vec::new(),
+                blame: None,
             }],
         );
         results
@@ -364,7 +375,10 @@ mod tests {
 
         let out = format_output(OutputFormat::Csv, None, &results).unwrap();
         let lines: Vec<&str> = out.split('\n').collect();
-        assert_eq!(lines[0], "requirement_id,file,line,comment_text,above,below,inline,scope");
+        assert_eq!(
+            lines[0],
+            "requirement_id,file,line,comment_text,above,below,inline,scope,blame"
+        );
         assert!(
             lines[1].contains("\"// REQ-1, \"\"quoted\"\"\""),
             "expected csv escaping, got: {}",

@@ -7,7 +7,7 @@ use tracy::args::resolve_args;
 use tracy::config::{find_config, load_config};
 use tracy::error::TracyError;
 use tracy::filter::collect_files;
-use tracy::git::collect_git_meta;
+use tracy::git::{add_blame, collect_git_meta};
 use tracy::output::format_output;
 use tracy::scan::scan_files;
 
@@ -47,7 +47,11 @@ fn run() -> Result<(), TracyError> {
     let args = resolve_args(cli, config, config_dir.as_deref())?;
 
     let files = collect_files(&args.root, &args.filter)?;
-    let matches = scan_files(&args.root, &files, &args.scan)?;
+    let mut matches = scan_files(&args.root, &files, &args.scan)?;
+
+    if args.include_blame {
+        add_blame(&args.root, &mut matches)?;
+    }
 
     if args.fail_on_empty && matches.is_empty() {
         return Err(TracyError::NoResults);

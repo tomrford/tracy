@@ -46,6 +46,7 @@ Each entry may also include `above`, `below`, `inline`, and `scope` context fiel
 | `--quiet`, `-q`        | Suppress stdout output                         |
 | `--fail-on-empty`      | Exit with error if no matches found            |
 | `--include-git-meta`   | Include git repository metadata in output      |
+| `--include-blame`      | Include git blame metadata for each match      |
 | `--include-vendored`   | Include vendored files (per `.gitattributes`)  |
 | `--include-generated`  | Include generated files (per `.gitattributes`) |
 | `--include-submodules` | Include git submodules                         |
@@ -59,6 +60,7 @@ Create a `tracy.toml` at your repo root (or pass `--config path`):
 ```toml
 format = "sarif"
 include_git_meta = true
+include_blame = true
 
 [scan]
 slug = ["REQ"]

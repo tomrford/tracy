@@ -7,6 +7,7 @@ pub use context::{CodeContext, ScopeItem};
 pub use error::ScanError;
 
 use ast_grep_language::{Language, LanguageExt, SupportLang};
+use crate::git::BlameInfo;
 use context::{extract_block_context, extract_hierarchy};
 use regex::Regex;
 use serde::Serialize;
@@ -35,6 +36,10 @@ pub struct Entry {
     /// Scope hierarchy from innermost to outermost (fn → impl → mod → file)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub scope: Vec<ScopeItem>,
+
+    /// Git blame metadata for the marker line
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blame: Option<BlameInfo>,
 }
 
 pub type ScanResult = BTreeMap<String, Vec<Entry>>;
@@ -106,6 +111,7 @@ fn scan_file(
                     below: block_ctx.below,
                     inline: block_ctx.inline,
                     scope,
+                    blame: None,
                 });
             }
         }

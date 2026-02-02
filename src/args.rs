@@ -37,6 +37,9 @@ pub struct Args {
     #[arg(long, help = "Include git repository metadata in output")]
     pub include_git_meta: bool,
 
+    #[arg(long, help = "Include git blame metadata for each match")]
+    pub include_blame: bool,
+
     #[command(flatten)]
     pub filter: FilterArgs,
 
@@ -52,6 +55,7 @@ pub struct ResolvedArgs {
     pub quiet: bool,
     pub fail_on_empty: bool,
     pub include_git_meta: bool,
+    pub include_blame: bool,
     pub filter: FilterArgs,
     pub scan: ScanArgs,
 }
@@ -85,6 +89,7 @@ pub fn resolve_args(
     let quiet = cli.quiet || config.quiet.unwrap_or(false);
     let fail_on_empty = cli.fail_on_empty || config.fail_on_empty.unwrap_or(false);
     let include_git_meta = cli.include_git_meta || config.include_git_meta.unwrap_or(false);
+    let include_blame = cli.include_blame || config.include_blame.unwrap_or(false);
 
     let include = if !cli.filter.include.is_empty() {
         cli.filter.include
@@ -122,6 +127,7 @@ pub fn resolve_args(
         quiet,
         fail_on_empty,
         include_git_meta,
+        include_blame,
         filter,
         scan: ScanArgs { slug },
     })
