@@ -8,6 +8,7 @@ pub enum OutputFormat {
     Json,
     Jsonl,
     Csv,
+    Sarif,
 }
 
 pub fn format_output(
@@ -19,6 +20,7 @@ pub fn format_output(
         OutputFormat::Json => format_json(meta, results),
         OutputFormat::Jsonl => format_jsonl(meta, results),
         OutputFormat::Csv => Ok(format_csv(meta, results)),
+        OutputFormat::Sarif => format_sarif(meta, results),
     }
 }
 
@@ -146,6 +148,140 @@ fn csv_escape(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "\"\""))
 }
 
+fn format_sarif(meta: Option<&GitMeta>, results: &ScanResult) -> Result<String, serde_json::Error> {
+    #[derive(Serialize)]
+    struct SarifLog<'a> {
+        #[serde(rename = "$schema")]
+        schema: &'static str,
+        version: &'static str,
+        runs: Vec<SarifRun<'a>>,
+    }
+
+    #[derive(Serialize)]
+    struct SarifRun<'a> {
+        tool: SarifTool,
+        results: Vec<SarifResult<'a>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        properties: Option<&'a GitMeta>,
+    }
+
+    #[derive(Serialize)]
+    struct SarifTool {
+        driver: SarifDriver,
+    }
+
+    #[derive(Serialize)]
+    struct SarifDriver {
+        name: &'static str,
+        version: &'static str,
+        rules: Vec<SarifRule>,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SarifRule {
+        id: &'static str,
+        name: &'static str,
+        short_description: SarifMessage,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SarifResult<'a> {
+        rule_id: &'static str,
+        level: &'static str,
+        message: SarifMessage,
+        locations: Vec<SarifLocation>,
+        properties: SarifResultProperties<'a>,
+    }
+
+    #[derive(Serialize)]
+    struct SarifResultProperties<'a> {
+        requirement_id: &'a str,
+        comment_text: &'a str,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SarifLocation {
+        physical_location: SarifPhysicalLocation,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SarifPhysicalLocation {
+        artifact_location: SarifArtifactLocation,
+        region: SarifRegion,
+    }
+
+    #[derive(Serialize)]
+    struct SarifArtifactLocation {
+        uri: String,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SarifRegion {
+        start_line: usize,
+    }
+
+    #[derive(Serialize)]
+    struct SarifMessage {
+        text: String,
+    }
+
+    let mut sarif_results = Vec::new();
+    for (requirement_id, entries) in results {
+        for entry in entries {
+            sarif_results.push(SarifResult {
+                rule_id: "traceability.requirement_ref",
+                level: "note",
+                message: SarifMessage {
+                    text: format!("Requirement reference: {requirement_id}"),
+                },
+                locations: vec![SarifLocation {
+                    physical_location: SarifPhysicalLocation {
+                        artifact_location: SarifArtifactLocation {
+                            uri: entry.file.to_string_lossy().replace('\\', "/"),
+                        },
+                        region: SarifRegion {
+                            start_line: entry.line,
+                        },
+                    },
+                }],
+                properties: SarifResultProperties {
+                    requirement_id,
+                    comment_text: &entry.comment_text,
+                },
+            });
+        }
+    }
+
+    let sarif = SarifLog {
+        schema: "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+        version: "2.1.0",
+        runs: vec![SarifRun {
+            tool: SarifTool {
+                driver: SarifDriver {
+                    name: "tracy",
+                    version: env!("CARGO_PKG_VERSION"),
+                    rules: vec![SarifRule {
+                        id: "traceability.requirement_ref",
+                        name: "Requirement reference",
+                        short_description: SarifMessage {
+                            text: "Requirement references found in comments".to_string(),
+                        },
+                    }],
+                },
+            },
+            results: sarif_results,
+            properties: meta,
+        }],
+    };
+
+    serde_json::to_string_pretty(&sarif)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,6 +368,29 @@ mod tests {
             lines[1].contains("\"// REQ-1, \"\"quoted\"\"\""),
             "expected csv escaping, got: {}",
             lines[1]
+        );
+    }
+
+    #[test]
+    fn sarif_has_basic_structure() {
+        let results = one_result();
+        let out = format_output(OutputFormat::Sarif, None, &results).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(value["version"], "2.1.0");
+
+        let run = &value["runs"][0];
+        assert_eq!(run["tool"]["driver"]["name"], "tracy");
+
+        let result = &run["results"][0];
+        assert_eq!(result["ruleId"], "traceability.requirement_ref");
+        assert_eq!(result["properties"]["requirement_id"], "REQ-1");
+        assert_eq!(
+            result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/lib.rs"
+        );
+        assert_eq!(
+            result["locations"][0]["physicalLocation"]["region"]["startLine"],
+            1
         );
     }
 }

@@ -37,7 +37,7 @@ Each entry may also include `above`, `below`, `inline`, and `scope` context fiel
 | ---------------------- | ---------------------------------------------- |
 | `--slug`, `-s`         | Slug pattern to match (e.g., `REQ`, `LIN`)     |
 | `--root`               | Root directory to scan (default: `.`)          |
-| `--format`             | Output format (`json`, `jsonl`, `csv`)         |
+| `--format`             | Output format (`json`, `jsonl`, `csv`, `sarif`) |
 | `--output`, `-o`       | Write output to file                           |
 | `--quiet`, `-q`        | Suppress stdout output                         |
 | `--fail-on-empty`      | Exit with error if no matches found            |
